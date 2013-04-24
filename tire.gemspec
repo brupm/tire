@@ -33,6 +33,7 @@ Gem::Specification.new do |s|
   s.add_dependency "hashr",       "~> 0.0.19"
   s.add_dependency "activesupport"
   s.add_dependency "ansi"
+  s.add_dependency "common-pool"
 
   # = Development dependencies
   #
@@ -44,6 +45,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency "mongoid",      "~> 2.2"
   s.add_development_dependency "redis-persistence"
   s.add_development_dependency "faraday"
+  s.add_development_dependency "common-pool"
 
   unless defined?(JRUBY_VERSION)
     s.add_development_dependency "yajl-ruby",   "~> 1.0"
