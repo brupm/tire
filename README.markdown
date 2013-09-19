@@ -18,9 +18,9 @@ Installation
 
 OK. First, you need a running _Elasticsearch_ server. Thankfully, it's easy. Let's define easy:
 
-    $ curl -k -L -o elasticsearch-0.20.2.tar.gz http://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-0.20.2.tar.gz
-    $ tar -zxvf elasticsearch-0.20.2.tar.gz
-    $ ./elasticsearch-0.20.2/bin/elasticsearch -f
+    $ curl -k -L -o elasticsearch-0.20.6.tar.gz http://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-0.20.6.tar.gz
+    $ tar -zxvf elasticsearch-0.20.6.tar.gz
+    $ ./elasticsearch-0.20.6/bin/elasticsearch -f
 
 See, easy. On a Mac, you can also use _Homebrew_:
 
@@ -471,6 +471,10 @@ In this case, just wrap the `mapping` method in a `settings` one, passing it the
     end
 ```
 
+Note, that the index will be created with settings and mappings only when it doesn't exist yet.
+To re-create the index with correct configuration, delete it first: `URL.index.delete` and
+create it afterwards: `URL.create_elasticsearch_index`.
+
 It may well be reasonable to wrap the index creation logic declared with `Tire.index('urls').create`
 in a class method of your model, in a module method, etc, to have better control on index creation when
 bootstrapping the application with Rake tasks or when setting up the test suite.
@@ -573,6 +577,38 @@ control on how the documents are added to or removed from the index:
     end
 ```
 
+Sometimes, you might want to have complete control about the indexing process. In such situations,
+just drop down one layer and use the `Tire::Index#store` and `Tire::Index#remove` methods directly:
+
+```ruby
+    class Article < ActiveRecord::Base
+      acts_as_paranoid
+      include Tire::Model::Search
+
+      after_save do
+        if deleted_at.nil?
+          self.index.store self
+        else
+          self.index.remove self
+        end
+      end
+    end
+```
+
+Of course, in this way, you're still performing an HTTP request during your database transaction,
+which is not optimal for large-scale applications. In these situations, a better option would be processing
+the index operations in background, with something like [Resque](https://github.com/resque/resque) or
+[Sidekiq](https://github.com/mperham/sidekiq):
+
+```ruby
+    class Article < ActiveRecord::Base
+      include Tire::Model::Search
+
+      after_save    { Indexer::Index.perform_async(document) }
+      after_destroy { Indexer::Remove.perform_async(document) }
+    end
+```
+
 When you're integrating _Tire_ with ActiveRecord models, you should use the `after_commit`
 and `after_rollback` hooks to keep the index in sync with your database.
 
@@ -662,11 +698,11 @@ Are we saying you have to fiddle with this thing in a `rails console` or silly R
 Just call the included _Rake_ task on the command line:
 
 ```bash
-    $ rake environment tire:import CLASS='Article'
+    $ rake environment tire:import:all
 ```
 
-You can also force-import the data by deleting the index first (and creating it with mapping
-provided by the `mapping` block in your model):
+You can also force-import the data by deleting the index first (and creating it with
+correct settings and/or mappings provided by the `mapping` block in your model):
 
 ```bash
     $ rake environment tire:import CLASS='Article' FORCE=true

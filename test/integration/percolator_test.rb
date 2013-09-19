@@ -8,11 +8,13 @@ module Tire
     context "Percolator" do
       setup do
         delete_registered_queries
+        delete_percolator_index
         @index = Tire.index('percolator-test')
         @index.create
       end
       teardown do
         delete_registered_queries
+        delete_percolator_index
         @index.delete
       end
 
@@ -96,16 +98,20 @@ module Tire
         end
       end
 
-    end
+    end if ENV['TRAVIS']
 
     private
 
     def delete_registered_queries
-      Configuration.client.get("#{Configuration.url}/_percolator/percolator-test/alert") rescue nil
-      Configuration.client.get("#{Configuration.url}/_percolator/percolator-test/gantz") rescue nil
-      Configuration.client.get("#{Configuration.url}/_percolator/percolator-test/weather") rescue nil
+      Configuration.client.delete("#{Configuration.url}/_percolator/percolator-test/alert")   rescue nil
+      Configuration.client.delete("#{Configuration.url}/_percolator/percolator-test/gantz")   rescue nil
+      Configuration.client.delete("#{Configuration.url}/_percolator/percolator-test/weather") rescue nil
     end
 
-  end unless ENV['TRAVIS']
+    def delete_percolator_index
+      Configuration.client.delete("#{Configuration.url}/_percolator") rescue nil
+    end
+
+  end
 
 end

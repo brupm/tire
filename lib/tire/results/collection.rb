@@ -58,7 +58,7 @@ module Tire
       alias :[] :slice
 
       def to_ary
-        self
+        results
       end
 
       def as_json(options=nil)
@@ -106,12 +106,17 @@ module Tire
           hits.map do |h|
             document = {}
 
-            # Update the document with content and ID
-            document = h['_source'] ? document.update( h['_source'] || {} ) : document.update( __parse_fields__(h['fields']) )
-            document.update( {'id' => h['_id']} )
+            # Update the document with fields and/or source
+            document.update h['_source'] if h['_source']
+            document.update __parse_fields__(h['fields']) if h['fields']
+
+            # Set document ID
+            document['id'] = h['_id']
 
             # Update the document with meta information
-            ['_score', '_type', '_index', '_version', 'sort', 'highlight', '_explanation'].each { |key| document.update( {key => h[key]} || {} ) }
+            ['_score', '_type', '_index', '_version', 'sort', 'highlight', '_explanation'].each do |key|
+              document.update key => h[key]
+            end
 
             # Return an instance of the "wrapper" class
             @wrapper.new(document)
@@ -136,7 +141,7 @@ module Tire
                              "based on _type '#{type}'.", e.backtrace
           end
 
-          records[type] = __find_records_by_ids klass, items.map { |h| h['_id'] }
+          records[type] = Array(__find_records_by_ids klass, items.map { |h| h['_id'] })
         end
 
         # Reorder records to preserve the order from search results

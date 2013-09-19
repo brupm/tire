@@ -1,6 +1,8 @@
 module Tire
   class Index
 
+    SUPPORTED_META_PARAMS_FOR_BULK = [:_routing, :_ttl, :_version, :_version_type, :_percolate, :_parent, :_timestamp]
+
     attr_reader :name, :response
 
     def initialize(name, &block)
@@ -135,6 +137,7 @@ module Tire
       params[:parent]  = options[:parent]  if options[:parent]
       params[:routing] = options[:routing] if options[:routing]
       params[:replication] = options[:replication] if options[:replication]
+      params[:version] = options[:version] if options[:version]
 
       params_encoded = params.empty? ? '' : "?#{params.to_param}"
 
@@ -180,15 +183,24 @@ module Tire
 
         header = { action.to_sym => { :_index => name, :_type => type, :_id => id } }
 
-        if document.respond_to?(:to_hash) && hash = document.to_hash
-          meta = {}
-          meta[:_version]   = hash.delete(:_version)
-          meta[:_routing]   = hash.delete(:_routing)
-          meta[:_percolate] = hash.delete(:_percolate)
-          meta[:_parent]    = hash.delete(:_parent)
-          meta[:_timestamp] = hash.delete(:_timestamp)
-          meta[:_ttl]       = hash.delete(:_ttl)
-          meta              = meta.reject { |name,value| !value || value.empty? }
+        if document.respond_to?(:to_hash) && doc_hash = document.to_hash
+          meta = doc_hash.select do |k,v|
+            [ :_parent,
+              :_percolate,
+              :_routing,
+              :_timestamp,
+              :_ttl,
+              :_version,
+              :_version_type].include?(k)
+          end
+          # Normalize Ruby 1.8 and Ruby 1.9 Hash#select behaviour
+          meta = Hash[meta] unless meta.is_a?(Hash)
+
+          # meta = SUPPORTED_META_PARAMS_FOR_BULK.inject({}) { |hash, param|
+          #   value = doc_hash.delete(param)
+          #   hash[param] = value unless !value || value.empty?
+          #   hash
+          # }
           header[action.to_sym].update(meta)
         end
 
@@ -223,7 +235,8 @@ module Tire
         end
 
       ensure
-        curl = %Q|curl -X POST "#{url}/_bulk" --data-binary '{... data omitted ...}'|
+        data = Configuration.logger && Configuration.logger.level.to_s == 'verbose' ? payload.join("\n") : '... data omitted ...'
+        curl = %Q|curl -X POST "#{url}/_bulk" --data-binary '#{data}'|
         logged('_bulk', curl)
       end
 
@@ -474,7 +487,7 @@ module Tire
         when document.is_a?(Hash)
           document[:_id] || document['_id'] || document[:id] || document['id']
         when document.respond_to?(:id) && document.id != document.object_id
-          document.id.as_json
+          document.id.to_s
       end
       $VERBOSE = old_verbose
       id

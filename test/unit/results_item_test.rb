@@ -15,9 +15,12 @@ module Tire
     context "Item" do
 
       setup do
-        @document = Results::Item.new :title  => 'Test',
-                                      :author => { :name => 'Kafka' },
-                                      :awards => { :best_fiction => { :year => '1925' } }
+        @document = Results::Item.new :title   => 'Test',
+                                      :author  => { :name => 'Kafka' },
+                                      :awards  => { :best_fiction => { :year => '1925' } },
+                                      :reviews => [ { :stars => 5, :comment => 'great' },
+                                                    { :stars => 3, :comment => 'decent' } ]
+
       end
 
       should "be initialized with a Hash or Hash like object" do
@@ -59,6 +62,15 @@ module Tire
       should "retrieve hash values from underlying hash" do
         assert_equal 'Kafka', @document[:author][:name]
       end
+
+      should "retrieve simple values from read_attribute_for_serialization" do
+        assert_equal 'Test', @document.read_attribute_for_serialization(:title)
+      end
+
+      should "retrieve hash values from read_attribute_for_serialization" do
+        assert_equal 'Kafka', @document.read_attribute_for_serialization(:author)[:name]
+      end
+
 
       should "allow to retrieve value by methods" do
         assert_not_nil @document.title
@@ -115,6 +127,8 @@ module Tire
         assert_instance_of Hash, @document.to_hash
         assert_instance_of Hash, @document.to_hash[:author]
         assert_instance_of Hash, @document.to_hash[:awards][:best_fiction]
+        assert_instance_of Hash, @document.to_hash[:reviews][0]
+        assert_instance_of Hash, @document.to_hash[:reviews][1]
 
         assert_equal 'Kafka', @document.to_hash[:author][:name]
         assert_equal '1925',  @document.to_hash[:awards][:best_fiction][:year]
@@ -164,6 +178,35 @@ module Tire
           assert_equal Tire::Results::Item, document.class
         end
 
+      end
+
+      context "with ActiveModel::Serializers" do
+        setup do
+          require 'active_model_serializers'
+
+          class ::MyItemWithSerializer < Tire::Results::Item
+            include ActiveModel::SerializerSupport
+          end
+          class ::MyItemSerializer < ActiveModel::Serializer
+            attribute :tags
+            attribute :title, :key => :name
+
+            def tags
+              object.tags.join('-')
+            end
+          end
+        end
+
+        should "be serializable" do
+          assert_nothing_raised do
+            doc = ::MyItemWithSerializer.new :title => 'Test', :tags => ['foo', 'bar']
+            doc_serializer = ::MyItemSerializer.new(doc)
+
+            hash = doc_serializer.as_json
+            assert_equal 'Test',    hash[:my_item][:name]
+            assert_equal 'foo-bar', hash[:my_item][:tags]
+          end
+        end
       end
 
     end
